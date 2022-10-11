@@ -15,7 +15,8 @@ knitr::opts_chunk$set(
 
 <!-- badges: start -->
 <!-- badges: end -->
-This is the repository for D'Agostino et al. (in review).
+
+This is the repository for D'Agostino et al. (in review): Variation in wild siamang (Symphalangus syndactylus) US-II phrases: further evidence of flexibility in a previously described stereotyped vocalization.
 
 ```{r, echo=T,warning=FALSE, results='hide'}
 us2wav <- tuneR::readWave("/Users/denaclink/Desktop/RStudio Projects/Siamang-vocal-variation/Sound Files/US2.wav")
