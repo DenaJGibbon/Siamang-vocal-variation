@@ -21,16 +21,16 @@ short.files <- list.files('combine',recursive = T,
 # Code to read in selection tables
 combined.US2.df <- data.frame()
 for(a in 1:length(files)) { tryCatch({
-  print(a) 
+  print(a)
   temp.table <- read.delim2(files[a],stringsAsFactors = F)
   temp.table <- subset(temp.table,View=="Spectrogram 1")
-  
+
   temp.table <- temp.table[order( as.numeric(temp.table$Begin.Time..s.)),]
-  
+
   group <- str_split_fixed(short.files[a],pattern = 'Song',n=2)[,1]
   group.label <- str_split_fixed(short.files[a],pattern = '.txt',n=2)[,1]
   new.temp.table <-cbind.data.frame(temp.table,group,group.label)
-  
+
   NoteIntervalList <- list()
   for(b in 1: (nrow(new.temp.table)-1 )){
     FirstRow <- new.temp.table[b,]
@@ -38,11 +38,11 @@ for(a in 1:length(files)) { tryCatch({
     InterNoteInterval <- as.numeric(SecondRow$Begin.Time..s.) - as.numeric(FirstRow$End.Time..s.)
     NoteIntervalList[[b]] <- InterNoteInterval
   }
-  
+
   NoteIntervalList[[ nrow(new.temp.table)]] <- 'NA'
-  
+
   new.temp.table$IOI <- unlist(NoteIntervalList)
-  
+
   combined.US2.df <- rbind.data.frame(combined.US2.df,new.temp.table)
 }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
@@ -62,23 +62,23 @@ TempUS <- subset(combined.US2.df, Sequence='us')
 hist( as.numeric(TempUS$IOI))
 
 # solution
-combined.US2.df[,4:13] <- 
+combined.US2.df[,4:13] <-
   combined.US2.df[,4:13] %>% mutate_if(is.character,as.numeric)
 
 pair.index <- unique(combined.US2.df$group.label)
 
 siamangUS2df <- data.frame()
 for(b in 1:length(pair.index)){
-  
+
      temp.table <- subset(combined.US2.df, group.label==pair.index[b])
-  
+
       individual <- temp.table$group[1]
-      note.dur <- mean(temp.table$End.Time..s. - temp.table$Begin.Time..s.)  
+      note.dur <- mean(temp.table$End.Time..s. - temp.table$Begin.Time..s.)
       call.dur  <- max(temp.table$End.Time..s.) - min(temp.table$Begin.Time..s.)
       call.id <- temp.table$group.label[1]
       nnotes <- nrow(temp.table)
-      
-       
+
+
         mean95 <-  mean(temp.table$Freq.95...Hz.)
         max95 <-  max(temp.table$Freq.95...Hz.)
         min95 <-  min(temp.table$Freq.95...Hz.)
@@ -99,17 +99,17 @@ for(b in 1:length(pair.index)){
         lastnotedur <- temp.table[nrow(temp.table),]$Dur.90...s.
         lastnoteminfreq <- temp.table[nrow(temp.table),]$Freq.5...Hz.
         lastnotemaxfreq <- temp.table[nrow(temp.table),]$Freq.95...Hz.
-        
+
         us2 <- temp.table[ which(temp.table$Sequence=='us'),]
-        
+
         if( nrow(us2) >0){
-          
+
         us2 <- us2[,c(10,11,13)]
         colnames(us2) <- c("US2Dur.90...s.","US2Freq.95...Hz.", "US2BW.90...Hz.")
-        
+
         n.bk <- length(which(temp.table$Sequence=='bk'))
         n.bm <- length(which(temp.table$Sequence=='bm'))
-        
+
         temp.US2.df <- cbind.data.frame(individual,call.id,call.dur,nnotes,
                                          min95, minbw,maxbw,mean95,max95,meanbw,mindurnote,
                                          maxdurnote,noterate,note1dur,note1maxfreq,
@@ -117,7 +117,7 @@ for(b in 1:length(pair.index)){
                                          range.bw,rest.dur,
                                          lastnotedur,lastnotemaxfreq,
                                         us2,n.bk,n.bm)
-        
+
         siamangUS2df <- rbind.data.frame(siamangUS2df,temp.US2.df)
         }
       }
@@ -143,18 +143,32 @@ table(siamangUS2df$site)
 
 siamangUS2df <- droplevels(subset(siamangUS2df,individual !='IndvB' ))
 
-plot(siamangUS2df$call.dur ~ as.numeric(siamangUS2df$sequence))
-
+# Subset based on weird values
+siamangUS2df <- subset(siamangUS2df, n.bk > 1 & n.bm > 1 & minbw > 50  & mindurnote > 0.05)
+head(siamangUS2df)
 # Supervised clustering using spectrogram features by site
-ml.model.specfeatures.svm <- e1071::svm(siamangUS2df[,-c(1:3,27,28,29)], 
-                                             siamangUS2df$individual, kernel = "radial", 
+ml.model.specfeatures.svm <- e1071::svm(siamangUS2df[,-c(1:3,18,27,28,29)],
+                                             siamangUS2df$individual, kernel = "radial",
                                              cross = nrow(siamangUS2df))
+
+levels(ml.model.specfeatures.svm$fitted) <- c("Group1", "Group2", "Group3", "Group4", "Group5", 
+                                              "Group6", "Group7", "Group8", "Group9","Group10")
+
+levels(siamangUS2df$individual) <- c("Group1", "Group2", "Group3", "Group4", "Group5", 
+                                              "Group6", "Group7", "Group8", "Group9","Group10")
+
+CaretConfusion <- caret::confusionMatrix(ml.model.specfeatures.svm$fitted,siamangUS2df$individual)
+
+write.csv(CaretConfusion$table,
+          'simangconfusionmatrix.csv')
 
 
 ml.model.specfeatures.svm$tot.accuracy
 
-ml.model.specfeatures.site <- e1071::svm(siamangUS2df[,-c(1:3,27,28,29)], 
-                                        siamangUS2df$site, kernel = "radial", 
+
+
+ml.model.specfeatures.site <- e1071::svm(siamangUS2df[,-c(1:3,18,27,28,29)],
+                                        siamangUS2df$site, kernel = "radial",
                                         cross = nrow(siamangUS2df))
 
 
@@ -165,14 +179,14 @@ mean(ml.model.specfeatures.site$accuracies)
 sd(ml.model.specfeatures.site$accuracies)
 
 
-ml.model.specfeatures.sequence <- e1071::svm(siamangUS2df[,-c(1:3,27,28,29)], 
-                                         siamangUS2df$sequence, kernel = "radial", 
+ml.model.specfeatures.sequence <- e1071::svm(siamangUS2df[,-c(1:3,18,27,28,29)],
+                                         siamangUS2df$sequence, kernel = "radial",
                                          cross = nrow(siamangUS2df))
 
 
 ml.model.specfeatures.sequence$tot.accuracy
 
-intern <- clValid(siamangUS2df[,-c(1:3,27,28,29)], 2:8, clMethods=c("hierarchical","kmeans","pam"),
+intern <- clValid(siamangUS2df[,-c(1:3,18,27,28,29)], 2:8, clMethods=c("hierarchical","kmeans","pam"),
                   maxitems= nrow(siamangUS2df),validation="internal")
 intern@labels
 summary(intern)
@@ -187,7 +201,7 @@ ggpubr::ggscatter(data=temp.pca,
                   x='PCA1',y='PCA2',color='Cluster')+ theme(legend.position = "none")
 
 ## Part 2b. Using UMAP to visualize differences in individual males
-male.individual.umap <- 
+male.individual.umap <-
   umap::umap(siamangUS2df[,-c(1:2,25:28,29)],labels=as.numeric(siamangUS2df$individual),
              controlscale=TRUE,scale=3)
 
@@ -214,7 +228,7 @@ my_plot_umap_specfeatures_individ
 
 # Do the cluster in the US2 phrases occur at different points in the song?
 # Run random forest
-rf2.male <- randomForest(x = siamangUS2df[,-c(1:2,17:29)], 
+rf2.male <- randomForest(x = siamangUS2df[,-c(1:2,17:29)],
                          ntree = 10000, proximity = TRUE)
 rf2.male
 
@@ -224,12 +238,12 @@ n.clusters <- seq(2,60,5)
 Male.sil.df <- data.frame()
 for(a in 1:length(n.clusters)){
   pam.rf <- pam(prox, n.clusters[a])
-  
-  
+
+
   sil <-
     cluster::silhouette(x = pam.rf$clustering,
                         dist = dist(siamangUS2df[,-c(1:2,25:28,29)]))
-  
+
   sil.val <- (summary(sil)$avg.width)
   temp.sil.df <-  cbind.data.frame(sil.val,n.clusters[a])
   Male.sil.df <- rbind.data.frame(Male.sil.df,temp.sil.df)
@@ -237,25 +251,25 @@ for(a in 1:length(n.clusters)){
 
 pam.rf <- pam(prox, Male.sil.df[which.max(Male.sil.df$sil.val),]$`n.clusters[a]`)
 
-siamangUS2df.clustering <- 
+siamangUS2df.clustering <-
   siamangUS2df
 
-siamangUS2df.clustering$RF <- 
+siamangUS2df.clustering$RF <-
   pam.rf$clustering
 
 
 
-# Run the UMAP algorithm which is used for data visualization 
-hornbill.umap.affinity <- 
+# Run the UMAP algorithm which is used for data visualization
+hornbill.umap.affinity <-
   umap::umap(siamangUS2df[,-c(1:2,25:28)],
              controlscale=TRUE,scale=3, labels=as.factor(affinity.df@idx))
 
-# Create a new dataframe that has the UMAP coordinates 
+# Create a new dataframe that has the UMAP coordinates
 hornbill.umap.affinity <- as.data.frame(hornbill.umap.affinity$layout)
 
 
 # Change the cluster ID to a factor instead of a number
-hornbill.umap.affinity$AffinityID <- 
+hornbill.umap.affinity$AffinityID <-
   as.factor(affinity.df@idx)
 
 
@@ -265,14 +279,14 @@ colnames(hornbill.umap.affinity) <-
 
 # Plot our results
 
-my_plot_hornbill.ClusterID <- 
+my_plot_hornbill.ClusterID <-
   ggpubr::ggscatter(data = hornbill.umap.affinity,
                     x = 'Dim.1',
                     y = 'Dim.2',
-                    color = 'AffinityID',size=3) + 
+                    color = 'AffinityID',size=3) +
   scale_color_manual(values = matlab::jet.colors (length(unique(hornbill.umap.affinity$AffinityID)))) +
-  theme_bw() + ggtitle('Siamang US2 (Affinity)') + 
-  xlab('UMAP: Dim 1')+ylab('UMAP: Dim 2')+theme(legend.position = "none") 
+  theme_bw() + ggtitle('Siamang US2 (Affinity)') +
+  xlab('UMAP: Dim 1')+ylab('UMAP: Dim 2')+theme(legend.position = "none")
 
 
 
@@ -285,11 +299,11 @@ for(a in 1:length(qvals)){
     siamangUS2df[,-c(1:2,25:28)],
     q=qvals[a]
   )
-  
+
   sil <-
     cluster::silhouette(x = cluster.df@idx,
                         dist = dist(siamangUS2df[,-c(1:2,25:28)]))
-  
+
   sil.val <- (summary(sil)$avg.width)
   temp.sil.df <-  cbind.data.frame(sil.val,qvals[a])
   Male.sil.df.aff <- rbind.data.frame(Male.sil.df.aff,temp.sil.df)
@@ -297,7 +311,7 @@ for(a in 1:length(qvals)){
 
 affinity.df <- apcluster::apcluster(
   negDistMat(r = 2),
-  siamangUS2df[,-c(1:2,25:28)], 
+  siamangUS2df[,-c(1:2,25:28)],
   q=qvals[which.max(Male.sil.df.aff$sil.val)]
 )
 
@@ -310,17 +324,17 @@ temp.df <- cbind.data.frame(siamangUS2df,affinty)
 ggpubr::ggboxplot(data=temp.df,x="affinty",y="call.dur")
 ggpubr::ggboxplot(data=temp.df,x="affinty",y="US2Freq.95...Hz.")
 
-# Run the UMAP algorithm which is used for data visualization 
-hornbill.umap.affinity <- 
+# Run the UMAP algorithm which is used for data visualization
+hornbill.umap.affinity <-
   umap::umap(siamangUS2df[,-c(1:2,25:29)],
              controlscale=TRUE,scale=3, labels=as.factor(affinity.df@idx))
 
-# Create a new dataframe that has the UMAP coordinates 
+# Create a new dataframe that has the UMAP coordinates
 hornbill.umap.affinity <- as.data.frame(hornbill.umap.affinity$layout)
 
 
 # Change the cluster ID to a factor instead of a number
-hornbill.umap.affinity$AffinityID <- 
+hornbill.umap.affinity$AffinityID <-
   as.factor(affinity.df@idx)
 
 
@@ -330,14 +344,14 @@ colnames(hornbill.umap.affinity) <-
 
 # Plot our results
 
-my_plot_hornbill.ClusterID <- 
+my_plot_hornbill.ClusterID <-
   ggpubr::ggscatter(data = hornbill.umap.affinity,
                     x = 'Dim.1',
                     y = 'Dim.2',
-                    color = 'AffinityID',size=3) + 
+                    color = 'AffinityID',size=3) +
   scale_color_manual(values = matlab::jet.colors (length(unique(hornbill.umap.affinity$AffinityID)))) +
-  theme_bw() + ggtitle('Siamang US2 (Affinity)') + 
-  xlab('UMAP: Dim 1')+ylab('UMAP: Dim 2')+theme(legend.position = "none") 
+  theme_bw() + ggtitle('Siamang US2 (Affinity)') +
+  xlab('UMAP: Dim 1')+ylab('UMAP: Dim 2')+theme(legend.position = "none")
 
 my_plot_hornbill.ClusterID
 
@@ -345,3 +359,56 @@ siamangUS2df$sequence <- as.numeric(siamangUS2df$sequence)
 
 ggpubr::ggscatter(data=siamangUS2df,
                   y= 'call.dur', x='sequence',facet.by = 'individual')
+
+
+# Part XX. Table summarizing features ------------------------------------
+table(siamangUS2df$individual)
+
+min.max <- data.frame(mean=sapply(siamangUS2df[,-c(1:3,18,27,28,29)],mean),
+                      sd=sapply(siamangUS2df[,-c(1:3,18,27,28,29)],sd),
+                      min=sapply(siamangUS2df[,-c(1:3,18,27,28,29)],min),
+                      max=sapply(siamangUS2df[,-c(1:3,18,27,28,29)],max))
+
+min.max$se <- min.max$sd / sqrt(nrow(min.max))
+
+min.max <- round(cbind.data.frame(min.max),2)
+
+min.max$mean.se <- paste(min.max$mean, '±', min.max$se)
+min.max$range <- paste(min.max$min, '-', min.max$max,sep='')
+
+NewMinMax <- min.max[,c('mean.se','range')] # paste(min.max$mean.se , '\n', min.max$range )
+
+
+Feature <- c('Number of notes',
+             'Minimum low frequency (Hz)',
+             'Minimum bandwidth (Hz)',
+             'Maximum bandwidth (Hz)',
+             'Mean maximum frequency (Hz)',
+             'Maximum high frequency (Hz)',
+             'Mean bandwidth (Hz)',
+             'Minimum note duration (s)',
+             'Maximum note duration (s)',
+             'Note rate (number of notes / duration)',
+             'Note 1 duration (s)',
+             'Note 1 maximum frequency (Hz)',
+             'Note 2 duration (s)',
+             'Note 2 maximum frequency (Hz)',
+             'Rest duration (s)',
+             'Last note duration (s)',
+             'Last note maximum frequency (Hz)',
+             'US2 Duration (s)',
+             'US2 maximum frequency (Hz)',
+             'US2 bandwidth (Hz)',
+             'Number of bark notes',
+             'Number of boom notes')
+
+table.with.features <- cbind.data.frame(Feature,NewMinMax)
+colnames(table.with.features) <- c('Feature','Mean ± SEM', 'Range')
+
+myft <- flextable(
+  (table.with.features))
+myft <- width(myft, width = 1)
+myft <- bold(myft, part = "header")
+myft
+
+#save_as_docx(myft,path='Siamang Features Summary.docx')
