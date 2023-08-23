@@ -6,9 +6,13 @@
 <!-- badges: start -->
 <!-- badges: end -->
 
-This is the repository for D’Agostino et al. (in review): Evidence for
+This is the repository for: Evidence for
 vocal flexibility in wild siamang (*Symphalangus syndactylus*) ululating
 scream phrases.
+
+Please cite as: 
+
+D’Agostino, J., Spehar, S., Abdullah, A., and Clink, D.J. Evidence for Vocal Flexibility in Wild Siamang (Symphalangus syndactylus) Ululating Scream Phrases. Int J Primatol (2023). https://doi.org/10.1007/s10764-023-00384-5
 
 ``` r
 us2wav <- tuneR::readWave("/Users/denaclink/Desktop/RStudio Projects/Siamang-vocal-variation/Sound Files/US2.wav")
